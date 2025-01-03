@@ -2,6 +2,8 @@
   "rtv.prefix": "{red}[RTV]{default}",
   "votemap.prefix": "{red}[Votemap]{default}",
   "timeleft.prefix": "{red}[Timeleft]{default}",
+  "extendtime.prefix": "{red}[VoteExtend]{default}",
+  "extendtime.notapplicable": "Voting to extend is not applicable right now.",
   "timeleft.remaining-rounds": "{0} round(s) remaining",
   "timeleft.remaining-time-hour": "Remaining time {0}:{1}:{2}",
   "timeleft.remaining-time-minute": "Remaining time {0} minute(s) and {1} second(s)",

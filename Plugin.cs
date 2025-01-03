@@ -32,6 +32,8 @@ namespace cs2_rockthevote
         private readonly RockTheVoteCommand _rtvManager;
         private readonly TimeLeftCommand _timeLeft;
         private readonly NextMapCommand _nextMap;
+        private readonly ExtendRoundTimeCommand _extendRoundTime;
+        private readonly VoteExtendRoundTimeCommand _voteExtendRoundTime;
 
         public Plugin(DependencyManager<Plugin, Config> dependencyManager,
             NominationCommand nominationManager,
@@ -39,7 +41,9 @@ namespace cs2_rockthevote
             VotemapCommand voteMapManager,
             RockTheVoteCommand rtvManager,
             TimeLeftCommand timeLeft,
-            NextMapCommand nextMap)
+            NextMapCommand nextMap,
+            ExtendRoundTimeCommand extendRoundTime,
+            VoteExtendRoundTimeCommand voteExtendRoundTime)
         {
             _dependencyManager = dependencyManager;
             _nominationManager = nominationManager;
@@ -48,6 +52,8 @@ namespace cs2_rockthevote
             _rtvManager = rtvManager;
             _timeLeft = timeLeft;
             _nextMap = nextMap;
+            _extendRoundTime = extendRoundTime;
+            _voteExtendRoundTime = voteExtendRoundTime;
 
             Config = new Config();
         }
@@ -94,6 +100,14 @@ namespace cs2_rockthevote
                 else if (text.StartsWith("nextmap"))
                 {
                     _nextMap.CommandHandler(player);
+                }
+                else if (text.StartsWith("extendroundtime"))
+                {
+                    _extendRoundTime.CommandHandler(player);
+                }
+                else if (text.StartsWith("voteextendroundtime"))
+                {
+                    _voteExtendRoundTime.CommandHandler(player);
                 }
             }
             return HookResult.Continue;

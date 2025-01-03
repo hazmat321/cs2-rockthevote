@@ -33,6 +33,10 @@ namespace cs2_rockthevote.Core
 
                 return TimeLimitValue - TimePlayed;
             }
+            set
+            {
+                _timeLimit.SetValue((float)value);
+            }
         }
 
         public TimeLimitManager(GameRules gameRules)
