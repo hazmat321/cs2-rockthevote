@@ -1,59 +1,40 @@
-﻿using CounterStrikeSharp.API;
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Menu;
 using CounterStrikeSharp.API.Modules.Timers;
 using cs2_rockthevote.Core;
+using Microsoft.Extensions.Localization;
 using System.Data;
-using System.Linq;
 using System.Text;
 using static CounterStrikeSharp.API.Core.Listeners;
 using Timer = CounterStrikeSharp.API.Modules.Timers.Timer;
 
 namespace cs2_rockthevote
 {
-    //public partial class Plugin
-    //{
-
-    //    [ConsoleCommand("votebot", "Votes to rock the vote")]
-    //    public void VoteBot(CCSPlayerController? player, CommandInfo? command)
-    //    {
-    //        var bot = ServerManager.ValidPlayers().FirstOrDefault(x => x.IsBot);
-    //        if (bot is not null)
-    //        {
-    //            _endmapVoteManager.MapVoted(bot, "de_dust2");
-    //        }
-    //    }
-    //}
-
-    public class EndMapVoteManager : IPluginDependency<Plugin, Config>
+    public class ExtendRoundTimeManager : IPluginDependency<Plugin, Config>
     {
         const int MAX_OPTIONS_HUD_MENU = 6;
-        public EndMapVoteManager(MapLister mapLister, ChangeMapManager changeMapManager, NominationCommand nominationManager, StringLocalizer localizer, PluginState pluginState, MapCooldown mapCooldown)
+        public ExtendRoundTimeManager(IStringLocalizer stringLocalizer, PluginState pluginState, TimeLimitManager timeLimitManager, GameRules gameRules)
         {
-            _mapLister = mapLister;
-            _changeMapManager = changeMapManager;
-            _nominationManager = nominationManager;
-            _localizer = localizer; 
+            _localizer = new StringLocalizer(stringLocalizer, "extendtime.prefix");
             _pluginState = pluginState;
-            _mapCooldown = mapCooldown;
+            _timeLimitManager = timeLimitManager;
+            _gameRules = gameRules;
         }
 
-        private readonly MapLister _mapLister;
-        private readonly ChangeMapManager _changeMapManager;
-        private readonly NominationCommand _nominationManager;
         private readonly StringLocalizer _localizer;
-        private MapCooldown _mapCooldown;
         private PluginState _pluginState;
+        private TimeLimitManager _timeLimitManager;
         private Timer? Timer;
+        private GameRules _gameRules;
 
         Dictionary<string, int> Votes = new();
         int timeLeft = -1;
 
-        List<string> mapsEllected = new();
-
         private IEndOfMapConfig? _config = null;
+
         private int _canVote = 0;
         private Plugin? _plugin;
 
@@ -67,17 +48,16 @@ namespace cs2_rockthevote
         {
             Votes.Clear();
             timeLeft = 0;
-            mapsEllected.Clear();
             KillTimer();
         }
 
-        public void MapVoted(CCSPlayerController player, string mapName)
+        public void ExtendTimeVoted(CCSPlayerController player, string voteResponse)
         {
-            Votes[mapName] += 1;
-            player.PrintToChat(_localizer.LocalizeWithPrefix("emv.you-voted", mapName));
+            Votes[voteResponse] += 1;
+            player.PrintToCenter(_localizer.LocalizeWithPrefix("extendtime.you-voted", voteResponse));
             if (Votes.Select(x => x.Value).Sum() >= _canVote)
             {
-                EndVote();
+                ExtendTimeVote();
             }
         }
 
@@ -109,7 +89,7 @@ namespace cs2_rockthevote
 
             int index = 1;
             StringBuilder stringBuilder = new();
-            stringBuilder.AppendFormat($"<b>{_localizer.Localize("emv.hud.hud-timer", timeLeft)}</b>");
+            stringBuilder.AppendFormat($"<b>{_localizer.Localize("extendtime.hud.hud-timer", timeLeft)}</b>");
             if (!_config!.HudMenu)
                 foreach (var kv in Votes.OrderByDescending(x => x.Value).Take(MAX_OPTIONS_HUD_MENU).Where(x => x.Value > 0))
                 {
@@ -127,10 +107,14 @@ namespace cs2_rockthevote
             }
         }
 
-        void EndVote()
+        void ExtendTimeVote()
         {
             bool mapEnd = _config is EndOfMapConfig;
             KillTimer();
+
+            // TODO: Move this into the cfg
+            var minutesToExtend = 15;
+
             decimal maxVotes = Votes.Select(x => x.Value).Max();
             IEnumerable<KeyValuePair<string, int>> potentialWinners = Votes.Where(x => x.Value == maxVotes);
             Random rnd = new();
@@ -141,57 +125,53 @@ namespace cs2_rockthevote
 
             if (maxVotes > 0)
             {
-                Server.PrintToChatAll(_localizer.LocalizeWithPrefix("emv.vote-ended", winner.Key, percent, totalVotes));
+                if (winner.Key == "No")
+                {
+                    Server.PrintToChatAll(_localizer.LocalizeWithPrefix("extendtime.vote-ended.failed", percent, totalVotes));
+                }
+                else
+                {
+                    Server.PrintToChatAll(_localizer.LocalizeWithPrefix("extendtime.vote-ended.passed", minutesToExtend, percent, totalVotes));
+                }
             }
             else
             {
-                Server.PrintToChatAll(_localizer.LocalizeWithPrefix("emv.vote-ended-no-votes", winner.Key));
+                Server.PrintToChatAll(_localizer.LocalizeWithPrefix("extendtime.vote-ended-no-votes"));
             }
 
-            PrintCenterTextAll(_localizer.Localize("emv.hud.finished", winner.Key));
-            _changeMapManager.ScheduleMapChange(winner.Key, mapEnd: mapEnd);
-            if (_config!.ChangeMapImmediatly)
-                _changeMapManager.ChangeNextMap(mapEnd);
+            if (winner.Key == "No")
+            {
+                // Do nothing, vote did not pass
+                PrintCenterTextAll(_localizer.Localize("extendtime.hud.finished", "not be extended."));
+            }
             else
             {
-                if (!mapEnd)
-                    Server.PrintToChatAll(_localizer.LocalizeWithPrefix("general.changing-map-next-round", winner.Key));
-            }
-        }
+                // Extend round time
+                ExtendRoundTime(minutesToExtend, _timeLimitManager, _gameRules);
 
-        IList<T> Shuffle<T>(Random rng, IList<T> array)
-        {
-            int n = array.Count;
-            while (n > 1)
-            {
-                int k = rng.Next(n--);
-                T temp = array[n];
-                array[n] = array[k];
-                array[k] = temp;
+                PrintCenterTextAll(_localizer.Localize("extendtime.hud.finished", "be extended."));
             }
-            return array;
+
+            _pluginState.ExtendTimeVoteHappening = false;
         }
 
         public void StartVote(IEndOfMapConfig config)
         {
             Votes.Clear();
-            _pluginState.EofVoteHappening = true;
+            _pluginState.ExtendTimeVoteHappening = true;
             _config = config;
-            int mapsToShow = _config!.MapsToShow == 0 ? MAX_OPTIONS_HUD_MENU : _config!.MapsToShow;
-            if (config.HudMenu)
-                mapsToShow = MAX_OPTIONS_HUD_MENU;
-
-            var mapsScrambled = Shuffle(new Random(), _mapLister.Maps!.Select(x => x.Name).Where(x => x != Server.MapName && !_mapCooldown.IsMapInCooldown(x)).ToList());
-            mapsEllected = _nominationManager.NominationWinners().Concat(mapsScrambled).Distinct().ToList();
-
 
             _canVote = ServerManager.ValidPlayerCount();
-            ChatMenu menu = new(_localizer.Localize("emv.hud.menu-title"));
-            foreach (var map in mapsEllected.Take(mapsToShow))
+
+            ChatMenu menu = new(_localizer.Localize("extendtime.hud.menu-title"));
+
+            var answers = new List<string>() { "Yes", "No" };
+
+            foreach (var answer in answers)
             {
-                Votes[map] = 0;
-                menu.AddMenuOption(map, (player, option) => {
-                    MapVoted(player, map);
+                Votes[answer] = 0;
+                menu.AddMenuOption(answer, (player, option) => {
+                    ExtendTimeVoted(player, answer);
                     MenuManager.CloseActiveMenu(player);
                 });
             }
@@ -204,11 +184,38 @@ namespace cs2_rockthevote
             {
                 if (timeLeft <= 0)
                 {
-                    EndVote();
+                    ExtendTimeVote();
                 }
                 else
                     timeLeft--;
             }, TimerFlags.REPEAT);
+        }
+
+        public bool ExtendRoundTime(int minutesToExtendBy, TimeLimitManager timeLimitManager, GameRules gameRules)
+        {
+            try
+            {
+                // RoundTime is in seconds, so multiply by 60 to convert to minutes
+                gameRules.RoundTime += (minutesToExtendBy * 60);
+
+                var gameRulesProxy = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First();
+                Utilities.SetStateChanged(gameRulesProxy, "CCSGameRulesProxy", "m_pGameRules");
+
+                // Update TimeRemaining in timeLimitManager
+                // TimeRemaining is in minutes, divide round time by 60
+                _timeLimitManager.TimeRemaining = _gameRules.RoundTime / 60;
+
+                _pluginState.MapChangeScheduled = false;
+                _pluginState.EofVoteHappening = false;
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                //Logger.LogWarning("Something went wrong when updating the round time {message}", ex.Message);
+
+                return false;
+            }
         }
     }
 }

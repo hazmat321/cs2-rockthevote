@@ -15,7 +15,7 @@ namespace cs2_rockthevote.Core
             mapLister.EventMapsLoaded += (e, maps) =>
             {
                 var map = Server.MapName;
-                if(map is not null)
+                if (map is not null)
                 {
                     if (InCoolDown == 0)
                     {

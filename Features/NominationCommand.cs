@@ -37,8 +37,8 @@ namespace cs2_rockthevote
         private GameRules _gamerules;
         private StringLocalizer _localizer;
         private PluginState _pluginState;
-        private MapCooldown _mapCooldown;
         private MapLister _mapLister;
+        private MapCooldown _mapCooldown;
 
         public NominationCommand(MapLister mapLister, GameRules gamerules, StringLocalizer localizer, PluginState pluginState, MapCooldown mapCooldown)
         {
@@ -50,7 +50,6 @@ namespace cs2_rockthevote
             _mapCooldown = mapCooldown;
             _mapCooldown.EventCooldownRefreshed += OnMapsLoaded;
         }
-
 
         public void OnMapStart(string map)
         {
