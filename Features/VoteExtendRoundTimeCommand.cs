@@ -78,5 +78,9 @@ namespace cs2_rockthevote
         {
             _config = config.Rtv;
         }
+           internal void CommandHandler(CCSPlayerController player)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
